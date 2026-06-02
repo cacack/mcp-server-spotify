@@ -1,10 +1,10 @@
 """FastMCP server exposing surgical Spotify playlist tools.
 
-Nine tools: find_playlists, search_tracks, create_playlist, save_playlist,
-get_playlist, add_tracks, remove_tracks, reorder_tracks, shuffle_playlist.
-Together they let the model locate a playlist and resolve tracks to URIs, then
-edit precisely — the curation taste comes from the model, the precise placement
-comes from the Spotify Web API.
+Eleven tools: find_playlists, search_tracks, create_playlist, save_playlist,
+get_playlist, add_tracks, remove_tracks, dedupe_playlist, reorder_tracks,
+shuffle_playlist, sort_playlist. Together they let the model locate a playlist
+and resolve tracks to URIs, then edit precisely — the curation taste comes from
+the model, the precise placement comes from the Spotify Web API.
 """
 
 from __future__ import annotations
@@ -136,15 +136,34 @@ def get_playlist(playlist_id: str) -> dict:
 
 
 @mcp.tool()
-def add_tracks(playlist_id: str, uris: list[str], position: int | None = None) -> dict:
+def add_tracks(
+    playlist_id: str,
+    uris: list[str],
+    position: int | None = None,
+    skip_existing: bool = False,
+) -> dict:
     """Add tracks to a playlist, appending or inserting at ``position``.
 
     ``uris`` may be track URIs, URLs, or bare IDs. Auto-chunks to 100/request.
-    Returns {snapshot_id, added}.
+    When ``skip_existing`` is true, tracks already in the playlist — and duplicate
+    URIs within ``uris`` — are dropped before adding, so no duplicates are created.
+    Returns {snapshot_id, added, skipped}.
     """
     client = auth.get_client()
     pid = resolve_id(playlist_id, "playlist")
     track_uris = [to_uri(u, "track") for u in uris]
+    skipped = 0
+    if skip_existing:
+        existing = {t["uri"] for t in get_playlist(pid)["tracks"]}
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for u in track_uris:
+            if u in existing or u in seen:
+                skipped += 1
+                continue
+            seen.add(u)
+            deduped.append(u)
+        track_uris = deduped
     snapshot_id = None
     pos = position
     for chunk in batched(track_uris, _TRACK_BATCH):
@@ -152,7 +171,7 @@ def add_tracks(playlist_id: str, uris: list[str], position: int | None = None) -
         snapshot_id = resp.get("snapshot_id")
         if pos is not None:
             pos += len(chunk)  # keep insertion order across chunks
-    return {"snapshot_id": snapshot_id, "added": len(track_uris)}
+    return {"snapshot_id": snapshot_id, "added": len(track_uris), "skipped": skipped}
 
 
 @mcp.tool()
@@ -173,6 +192,35 @@ def remove_tracks(playlist_id: str, uris: list[str]) -> dict:
 
 
 @mcp.tool()
+def dedupe_playlist(uri: str) -> dict:
+    """Remove exact-duplicate tracks from a playlist, keeping the first occurrence.
+
+    Only literal repeats of the same track are removed (matched by URI) — different
+    versions of a song (remaster, live, single edit) are left alone, since deciding
+    whether those are "duplicates" is a judgment call best left to the caller.
+
+    Works by rebuilding the playlist from the first-occurrence-deduped track list
+    (Spotify deprecated removing items by position, so keeping one occurrence while
+    dropping the rest is not possible via remove). Order is otherwise preserved.
+    Note: only standard tracks are kept — local files and podcast episodes are
+    dropped. Returns {playlist_id, removed}.
+    """
+    client = auth.get_client()
+    pid = resolve_id(uri, "playlist")
+    tracks = get_playlist(pid)["tracks"]
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for track in tracks:
+        if track["uri"] not in seen:
+            seen.add(track["uri"])
+            deduped.append(track["uri"])
+    removed = len(tracks) - len(deduped)
+    if removed:
+        _persist_track_order(client, pid, deduped)
+    return {"playlist_id": pid, "removed": removed}
+
+
+@mcp.tool()
 def reorder_tracks(
     playlist_id: str, range_start: int, insert_before: int, range_length: int = 1
 ) -> dict:
@@ -188,27 +236,79 @@ def reorder_tracks(
 
 
 @mcp.tool()
-def shuffle_playlist(uri: str) -> dict:
-    """Reorder a playlist into a randomized, artist-spread order and persist it.
+def shuffle_playlist(uri: str, method: str = "artist_spread") -> dict:
+    """Reorder a playlist into a randomized order and persist it.
 
-    Spreads each artist's tracks across the playlist so the same artist rarely
-    lands back-to-back (a balanced shuffle, not pure random) — useful for
-    un-grouping a playlist that was built artist-by-artist. Persists the new order
-    in a single bulk replace. Note: only standard tracks are preserved; local
-    files and podcast episodes are dropped. Returns {playlist_id, tracks}.
+    ``method`` selects the shuffle:
+    - "artist_spread" (default): spreads each artist's tracks across the playlist
+      so the same artist rarely lands back-to-back — good for un-grouping a
+      playlist built artist-by-artist.
+    - "random": a plain uniform shuffle, no artist awareness.
+
+    Persists the new order in a single bulk replace. Note: only standard tracks are
+    preserved; local files and podcast episodes are dropped. Returns
+    {playlist_id, tracks, method}.
     """
     client = auth.get_client()
     pid = resolve_id(uri, "playlist")
     tracks = get_playlist(pid)["tracks"]
     if not tracks:
-        return {"playlist_id": pid, "tracks": 0}
-    ordered = artist_spread_order(tracks, random.Random())
-    uris = [t["uri"] for t in ordered]
-    # Replace the whole list in one call (<=100), then append any overflow in order.
+        return {"playlist_id": pid, "tracks": 0, "method": method}
+    if method == "artist_spread":
+        ordered = artist_spread_order(tracks, random.Random())
+    elif method == "random":
+        ordered = list(tracks)
+        random.Random().shuffle(ordered)
+    else:
+        raise ValueError(f"unknown shuffle method: {method!r} (use 'artist_spread' or 'random')")
+    _persist_track_order(client, pid, [t["uri"] for t in ordered])
+    return {"playlist_id": pid, "tracks": len(ordered), "method": method}
+
+
+_SORT_KEYS = {
+    "year": lambda t: (
+        (t.get("year") or ""),
+        (t.get("artist") or "").lower(),
+        (t.get("name") or "").lower(),
+    ),
+    "artist": lambda t: (
+        (t.get("artist") or "").lower(),
+        (t.get("year") or ""),
+        (t.get("name") or "").lower(),
+    ),
+    "title": lambda t: ((t.get("name") or "").lower(), (t.get("artist") or "").lower()),
+}
+
+
+@mcp.tool()
+def sort_playlist(uri: str, by: str = "year", order: str = "asc") -> dict:
+    """Sort a playlist and persist the new order.
+
+    ``by`` is one of "year" (album release year — chronological), "artist", or
+    "title"; ``order`` is "asc" or "desc". Note: "year" reflects the album's
+    release date, so reissues/compilations may sort by the reissue year, not the
+    song's original release. Only standard tracks are preserved (local files and
+    podcast episodes are dropped). Returns {playlist_id, tracks, by, order}.
+    """
+    if by not in _SORT_KEYS:
+        raise ValueError(f"unknown sort key: {by!r} (use {', '.join(_SORT_KEYS)})")
+    if order not in ("asc", "desc"):
+        raise ValueError(f"unknown order: {order!r} (use 'asc' or 'desc')")
+    client = auth.get_client()
+    pid = resolve_id(uri, "playlist")
+    tracks = get_playlist(pid)["tracks"]
+    if not tracks:
+        return {"playlist_id": pid, "tracks": 0, "by": by, "order": order}
+    ordered = sorted(tracks, key=_SORT_KEYS[by], reverse=(order == "desc"))
+    _persist_track_order(client, pid, [t["uri"] for t in ordered])
+    return {"playlist_id": pid, "tracks": len(ordered), "by": by, "order": order}
+
+
+def _persist_track_order(client, pid: str, uris: list[str]) -> None:
+    """Persist an exact track order: bulk-replace the first 100, append the rest."""
     client.playlist_replace_items(pid, uris[:_TRACK_BATCH])
     for chunk in batched(uris[_TRACK_BATCH:], _TRACK_BATCH):
         client.playlist_add_items(pid, chunk)
-    return {"playlist_id": pid, "tracks": len(uris)}
 
 
 def main() -> None:

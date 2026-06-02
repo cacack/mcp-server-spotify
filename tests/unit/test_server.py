@@ -7,7 +7,22 @@ absolute-index handling in get_playlist when non-track items are interleaved.
 
 from __future__ import annotations
 
+import pytest
+
 from mcp_server_spotify import server
+
+
+def _wrap_y(uri, name, artist, year):
+    """A playlist-item wrapper carrying an album release year (for sort tests)."""
+    return {
+        "track": {
+            "type": "track",
+            "uri": uri,
+            "name": name,
+            "artists": [{"name": artist}],
+            "album": {"name": "Al", "release_date": f"{year}-06-01"},
+        }
+    }
 
 
 def _wrap(uri, name="N", artist="A"):
@@ -94,7 +109,7 @@ def test_shuffle_playlist_replaces_with_permutation(fake_spotify):
     ]
     client = fake_spotify(playlist_pages=[(items, False)])
     out = server.shuffle_playlist("spotify:playlist:p")
-    assert out == {"playlist_id": "p", "tracks": 4}
+    assert out == {"playlist_id": "p", "tracks": 4, "method": "artist_spread"}
     replace = next(c for c in client.calls if c[0] == "playlist_replace")
     assert replace[1] == "p"
     # same set of URIs, just reordered
@@ -109,8 +124,111 @@ def test_shuffle_playlist_replaces_with_permutation(fake_spotify):
 def test_shuffle_playlist_empty_is_noop(fake_spotify):
     client = fake_spotify(playlist_pages=[([], False)])
     out = server.shuffle_playlist("p")
-    assert out == {"playlist_id": "p", "tracks": 0}
+    assert out == {"playlist_id": "p", "tracks": 0, "method": "artist_spread"}
     assert not any(c[0] == "playlist_replace" for c in client.calls)
+
+
+def test_dedupe_playlist_removes_exact_duplicates(fake_spotify):
+    items = [
+        _wrap("spotify:track:a"),
+        _wrap("spotify:track:b"),
+        _wrap("spotify:track:a"),
+        _wrap("spotify:track:c"),
+        _wrap("spotify:track:b"),
+        _wrap("spotify:track:a"),
+    ]
+    client = fake_spotify(playlist_pages=[(items, False)])
+    out = server.dedupe_playlist("spotify:playlist:p")
+    assert out == {"playlist_id": "p", "removed": 3}
+    # Rebuilt via replace with the first-occurrence-deduped list, order preserved.
+    replace = next(c for c in client.calls if c[0] == "playlist_replace")
+    assert replace[2] == ["spotify:track:a", "spotify:track:b", "spotify:track:c"]
+
+
+def test_dedupe_playlist_no_duplicates_is_noop(fake_spotify):
+    client = fake_spotify(
+        playlist_pages=[([_wrap("spotify:track:a"), _wrap("spotify:track:b")], False)]
+    )
+    out = server.dedupe_playlist("p")
+    assert out == {"playlist_id": "p", "removed": 0}
+    assert not any(c[0] == "playlist_replace" for c in client.calls)
+
+
+def test_add_tracks_skip_existing_filters_present_and_input_dups(fake_spotify):
+    client = fake_spotify(
+        playlist_pages=[([_wrap("spotify:track:a"), _wrap("spotify:track:b")], False)]
+    )
+    out = server.add_tracks(
+        "spotify:playlist:p",
+        [
+            "spotify:track:a",
+            "spotify:track:c",
+            "spotify:track:b",
+            "spotify:track:c",
+            "spotify:track:d",
+        ],
+        skip_existing=True,
+    )
+    assert out["added"] == 2
+    assert out["skipped"] == 3  # a,b already present; the second c is an input dup
+    add_call = next(c for c in client.calls if c[0] == "playlist_add_items")
+    assert add_call[2] == ["spotify:track:c", "spotify:track:d"]
+
+
+def test_shuffle_playlist_random_is_permutation(fake_spotify):
+    items = [_wrap(f"spotify:track:{x}") for x in "abcd"]
+    client = fake_spotify(playlist_pages=[(items, False)])
+    out = server.shuffle_playlist("p", method="random")
+    assert out["method"] == "random"
+    replace = next(c for c in client.calls if c[0] == "playlist_replace")
+    assert sorted(replace[2]) == [f"spotify:track:{x}" for x in "abcd"]
+
+
+def test_shuffle_playlist_unknown_method_raises(fake_spotify):
+    fake_spotify(playlist_pages=[([_wrap("spotify:track:a")], False)])
+    with pytest.raises(ValueError):
+        server.shuffle_playlist("p", method="bogus")
+
+
+def test_sort_playlist_by_year_ascending(fake_spotify):
+    items = [
+        _wrap_y("spotify:track:c", "C", "Z", 1999),
+        _wrap_y("spotify:track:a", "A", "X", 1992),
+        _wrap_y("spotify:track:b", "B", "Y", 1995),
+    ]
+    client = fake_spotify(playlist_pages=[(items, False)])
+    out = server.sort_playlist("p", by="year", order="asc")
+    assert out["by"] == "year" and out["order"] == "asc"
+    replace = next(c for c in client.calls if c[0] == "playlist_replace")
+    assert replace[2] == ["spotify:track:a", "spotify:track:b", "spotify:track:c"]
+
+
+def test_sort_playlist_descending_reverses(fake_spotify):
+    items = [
+        _wrap_y("spotify:track:a", "A", "X", 1992),
+        _wrap_y("spotify:track:b", "B", "Y", 1999),
+    ]
+    client = fake_spotify(playlist_pages=[(items, False)])
+    server.sort_playlist("p", by="year", order="desc")
+    replace = next(c for c in client.calls if c[0] == "playlist_replace")
+    assert replace[2] == ["spotify:track:b", "spotify:track:a"]
+
+
+def test_sort_playlist_by_artist(fake_spotify):
+    items = [
+        _wrap_y("spotify:track:a", "A", "Beck", 1994),
+        _wrap_y("spotify:track:b", "B", "Adele", 1994),
+    ]
+    client = fake_spotify(playlist_pages=[(items, False)])
+    server.sort_playlist("p", by="artist", order="asc")
+    replace = next(c for c in client.calls if c[0] == "playlist_replace")
+    assert replace[2] == ["spotify:track:b", "spotify:track:a"]  # Adele < Beck
+
+
+def test_sort_playlist_unknown_key_raises(fake_spotify):
+    fake_spotify()
+    with pytest.raises(ValueError):
+        server.sort_playlist("p", by="bogus")
 
 
 def test_save_playlist_follows_and_resolves_id(fake_spotify):

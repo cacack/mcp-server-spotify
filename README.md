@@ -16,10 +16,12 @@ The curation taste comes from the model; the precise placement comes from the AP
 | `create_playlist(name, description, public)` | Create an empty playlist → `{playlist_id, uri, url}` |
 | `save_playlist(uri)` | Add a playlist to your library ("Save"/follow) → `{playlist_id, saved}` |
 | `get_playlist(playlist_id)` | Read full tracklist **with positions** (handles >100 tracks) |
-| `add_tracks(playlist_id, uris, position?)` | Append or insert at a position (auto-chunks to 100) |
+| `add_tracks(playlist_id, uris, position?, skip_existing?)` | Append or insert at a position (auto-chunks to 100); `skip_existing` drops tracks already present |
 | `remove_tracks(playlist_id, uris)` | Remove all occurrences of the given tracks |
+| `dedupe_playlist(uri)` | Remove exact-duplicate tracks (by URI), keeping the first occurrence |
 | `reorder_tracks(playlist_id, range_start, insert_before, range_length?)` | Move a block of tracks |
-| `shuffle_playlist(uri)` | Persist a randomized, artist-spread order (de-clusters same-artist runs) |
+| `shuffle_playlist(uri, method?)` | Persist a randomized order — `artist_spread` (default, de-clusters) or `random` |
+| `sort_playlist(uri, by?, order?)` | Persist a sort by `year`/`artist`/`title`, `asc`/`desc` |
 
 URIs, `open.spotify.com` URLs, and bare IDs are all accepted interchangeably.
 

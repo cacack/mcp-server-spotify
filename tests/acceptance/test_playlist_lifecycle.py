@@ -94,6 +94,35 @@ def test_save_playlist_succeeds(temp_playlist):
     assert out["playlist_id"] == temp_playlist["playlist_id"]
 
 
+def test_dedupe_playlist_removes_exact_duplicates(temp_playlist, two_track_uris):
+    pid = temp_playlist["playlist_id"]
+    a, b = two_track_uris
+    server.add_tracks(pid, [a, b, a])  # 'a' intentionally duplicated
+    out = server.dedupe_playlist(pid)
+    assert out["removed"] == 1
+    after = [t["uri"] for t in server.get_playlist(pid)["tracks"]]
+    assert sorted(after) == sorted([a, b])
+
+
+def test_add_tracks_skip_existing(temp_playlist, two_track_uris):
+    pid = temp_playlist["playlist_id"]
+    a, b = two_track_uris
+    server.add_tracks(pid, [a])
+    out = server.add_tracks(pid, [a, b], skip_existing=True)
+    assert out["added"] == 1 and out["skipped"] == 1
+    after = [t["uri"] for t in server.get_playlist(pid)["tracks"]]
+    assert sorted(after) == sorted([a, b])
+
+
+def test_sort_playlist_orders_by_year(temp_playlist, two_track_uris):
+    pid = temp_playlist["playlist_id"]
+    server.add_tracks(pid, two_track_uris)
+    out = server.sort_playlist(pid, by="year", order="asc")
+    assert out["tracks"] == 2
+    years = [t["year"] for t in server.get_playlist(pid)["tracks"]]
+    assert years == sorted(years)
+
+
 def test_search_returns_compact_shape(two_track_uris):
     results = server.search_tracks("Soundgarden Black Hole Sun", limit=3)
     assert results, "expected at least one result"
