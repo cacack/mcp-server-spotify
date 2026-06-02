@@ -6,6 +6,7 @@ import pytest
 
 from mcp_server_spotify.normalize import (
     batched,
+    compact_playlist,
     compact_track,
     resolve_id,
     to_uri,
@@ -91,3 +92,26 @@ def test_batched_empty():
 
 def test_batched_exact_multiple_has_no_trailing_empty():
     assert list(batched(range(4), 2)) == [[0, 1], [2, 3]]
+
+
+def test_compact_playlist_projects_fields():
+    pl = {
+        "name": "Blitz from the 90s",
+        "uri": "spotify:playlist:abc",
+        "owner": {"id": "cacacknak"},
+        "tracks": {"total": 60},
+        "public": False,
+    }
+    assert compact_playlist(pl) == {
+        "name": "Blitz from the 90s",
+        "uri": "spotify:playlist:abc",
+        "owner": "cacacknak",
+        "tracks": 60,
+        "public": False,
+    }
+
+
+@pytest.mark.parametrize("bad", [None, {}])
+def test_compact_playlist_handles_missing(bad):
+    out = compact_playlist(bad)
+    assert out is None or out["owner"] is None

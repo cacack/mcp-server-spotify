@@ -66,6 +66,17 @@ def test_full_playlist_lifecycle(temp_playlist, two_track_uris):
     assert [t["uri"] for t in final["tracks"]] == [uri_a]
 
 
+def test_find_playlists_locates_own_playlist_by_name(temp_playlist):
+    # The whole point: a freshly created private playlist is findable by name via
+    # the library endpoint (unlike the catalog search the connector uses).
+    found = server.find_playlists("mcp-server-spotify] acceptance")
+    by_uri = {p["uri"]: p for p in found}
+    assert temp_playlist["uri"] in by_uri, "newly created playlist not found by name"
+    match = by_uri[temp_playlist["uri"]]
+    assert match["owned"] is True
+    assert set(match) == {"name", "uri", "owner", "tracks", "public", "owned"}
+
+
 def test_search_returns_compact_shape(two_track_uris):
     results = server.search_tracks("Soundgarden Black Hole Sun", limit=3)
     assert results, "expected at least one result"

@@ -1,9 +1,9 @@
 """FastMCP server exposing surgical Spotify playlist tools.
 
-Six tools: search_tracks, create_playlist, get_playlist, add_tracks,
-remove_tracks, reorder_tracks. Together they let the model resolve tracks to
-URIs and then edit a playlist precisely — the curation taste comes from the
-model, the precise placement comes from the Spotify Web API.
+Seven tools: find_playlists, search_tracks, create_playlist, get_playlist,
+add_tracks, remove_tracks, reorder_tracks. Together they let the model locate a
+playlist and resolve tracks to URIs, then edit precisely — the curation taste
+comes from the model, the precise placement comes from the Spotify Web API.
 """
 
 from __future__ import annotations
@@ -11,11 +11,43 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
 from . import auth
-from .normalize import batched, compact_track, resolve_id, to_uri
+from .normalize import batched, compact_playlist, compact_track, resolve_id, to_uri
 
 mcp = FastMCP("spotify")
 
 _TRACK_BATCH = 100  # Spotify caps add/remove at 100 items per request.
+
+
+@mcp.tool()
+def find_playlists(name: str = "") -> list[dict]:
+    """Find the user's own playlists by name (case-insensitive substring match).
+
+    Returns the user's library — owned and followed — as compact dicts:
+    {name, uri, owner, tracks, public, owned}. An empty ``name`` returns all.
+
+    Use this to resolve a playlist by title before get_playlist / editing, since
+    the catalog search tool can't reliably find a user's own private playlists.
+    """
+    client = auth.get_client()
+    me = client.current_user()["id"]
+    needle = name.strip().lower()
+    out: list[dict] = []
+    offset = 0
+    while True:
+        page = client.current_user_playlists(limit=50, offset=offset)
+        items = page.get("items", [])
+        for pl in items:
+            compact = compact_playlist(pl)
+            if compact is None:
+                continue
+            if needle and needle not in (compact["name"] or "").lower():
+                continue
+            compact["owned"] = compact["owner"] == me
+            out.append(compact)
+        offset += len(items)
+        if not page.get("next") or not items:
+            break
+    return out
 
 
 @mcp.tool()

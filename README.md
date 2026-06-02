@@ -11,6 +11,7 @@ The curation taste comes from the model; the precise placement comes from the AP
 
 | Tool | What it does |
 |------|--------------|
+| `find_playlists(name)` | Find your own playlists by name (substring) → `{name, uri, owner, tracks, public, owned}` |
 | `search_tracks(query, limit)` | Find tracks → `{name, artist, album, year, uri}` |
 | `create_playlist(name, description, public)` | Create an empty playlist → `{playlist_id, uri, url}` |
 | `get_playlist(playlist_id)` | Read full tracklist **with positions** (handles >100 tracks) |
