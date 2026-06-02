@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Secrets / local config
+.env
+.spotify-mcp/
+.cache
+*.token.json
