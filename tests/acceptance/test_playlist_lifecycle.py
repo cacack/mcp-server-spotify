@@ -77,6 +77,14 @@ def test_find_playlists_locates_own_playlist_by_name(temp_playlist):
     assert set(match) == {"name", "uri", "owner", "tracks", "public", "owned"}
 
 
+def test_save_playlist_succeeds(temp_playlist):
+    # Following is idempotent — the created playlist is already in the library,
+    # but save_playlist should report success and resolve the id from the URI.
+    out = server.save_playlist(temp_playlist["uri"])
+    assert out["saved"] is True
+    assert out["playlist_id"] == temp_playlist["playlist_id"]
+
+
 def test_search_returns_compact_shape(two_track_uris):
     results = server.search_tracks("Soundgarden Black Hole Sun", limit=3)
     assert results, "expected at least one result"

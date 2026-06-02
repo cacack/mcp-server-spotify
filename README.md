@@ -14,6 +14,7 @@ The curation taste comes from the model; the precise placement comes from the AP
 | `find_playlists(name)` | Find your own playlists by name (substring) → `{name, uri, owner, tracks, public, owned}` |
 | `search_tracks(query, limit)` | Find tracks → `{name, artist, album, year, uri}` |
 | `create_playlist(name, description, public)` | Create an empty playlist → `{playlist_id, uri, url}` |
+| `save_playlist(uri)` | Add a playlist to your library ("Save"/follow) → `{playlist_id, saved}` |
 | `get_playlist(playlist_id)` | Read full tracklist **with positions** (handles >100 tracks) |
 | `add_tracks(playlist_id, uris, position?)` | Append or insert at a position (auto-chunks to 100) |
 | `remove_tracks(playlist_id, uris)` | Remove all occurrences of the given tracks |

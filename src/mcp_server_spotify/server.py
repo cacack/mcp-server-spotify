@@ -1,9 +1,9 @@
 """FastMCP server exposing surgical Spotify playlist tools.
 
-Seven tools: find_playlists, search_tracks, create_playlist, get_playlist,
-add_tracks, remove_tracks, reorder_tracks. Together they let the model locate a
-playlist and resolve tracks to URIs, then edit precisely — the curation taste
-comes from the model, the precise placement comes from the Spotify Web API.
+Eight tools: find_playlists, search_tracks, create_playlist, save_playlist,
+get_playlist, add_tracks, remove_tracks, reorder_tracks. Together they let the
+model locate a playlist and resolve tracks to URIs, then edit precisely — the
+curation taste comes from the model, the precise placement comes from the API.
 """
 
 from __future__ import annotations
@@ -76,6 +76,24 @@ def create_playlist(name: str, description: str = "", public: bool = False) -> d
         "uri": pl["uri"],
         "url": (pl.get("external_urls") or {}).get("spotify"),
     }
+
+
+@mcp.tool()
+def save_playlist(uri: str) -> dict:
+    """Add a playlist to the user's library — i.e. "Save"/follow it.
+
+    Mainly for rescuing connector/AI-generated playlists, which are created in an
+    unsaved state and don't appear in the library (or in find_playlists) until
+    saved. Accepts a playlist URI, URL, or bare ID. Returns {playlist_id, saved}.
+    """
+    client = auth.get_client()
+    pid = resolve_id(uri, "playlist")
+    # spotipy's current_user_follow_playlist() currently routes through a
+    # /me/library endpoint that returns repeated 500s; call the canonical
+    # PUT /playlists/{id}/followers endpoint directly, which works. Follow
+    # privately so saving doesn't expose the playlist on the user's profile.
+    client._put(f"playlists/{pid}/followers", payload={"public": False})
+    return {"playlist_id": pid, "saved": True}
 
 
 @mcp.tool()
