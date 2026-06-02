@@ -85,6 +85,13 @@ def test_find_playlists_sets_owned_flag(fake_spotify):
     assert out["Theirs"]["owned"] is False
 
 
+def test_save_playlist_follows_and_resolves_id(fake_spotify):
+    client = fake_spotify()
+    out = server.save_playlist("https://open.spotify.com/playlist/xyz?si=abc")
+    assert out == {"playlist_id": "xyz", "saved": True}
+    assert ("_put", "playlists/xyz/followers", {"public": False}) in client.calls
+
+
 def test_search_tracks_returns_compact_and_clamps_limit(fake_spotify):
     client = fake_spotify(
         search_items=[
