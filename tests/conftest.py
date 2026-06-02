@@ -129,6 +129,10 @@ class FakeSpotify:
         self.calls.append(("playlist_reorder", pid, range_start, insert_before, range_length))
         return {"snapshot_id": "snap-reorder"}
 
+    def playlist_replace_items(self, pid, uris):
+        self.calls.append(("playlist_replace", pid, list(uris)))
+        return {"snapshot_id": "snap-replace"}
+
     def _put(self, url, payload=None):
         # save_playlist calls the canonical followers endpoint via spotipy's _put.
         self.calls.append(("_put", url, payload))

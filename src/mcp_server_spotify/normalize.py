@@ -72,6 +72,32 @@ def compact_playlist(pl: dict | None) -> dict | None:
     }
 
 
+def artist_spread_order(tracks: list[dict], rng) -> list[dict]:
+    """Reorder tracks into a randomized, artist-spread order (a balanced shuffle).
+
+    Each artist's tracks are placed at evenly-spaced positions with a random phase,
+    so the same artist rarely lands back-to-back — unlike a pure shuffle, which can
+    cluster. ``tracks`` items must have an ``artist`` key; ``rng`` is a
+    ``random.Random``. Returns a new list containing exactly the same items.
+    """
+    groups: dict = {}
+    for t in tracks:
+        groups.setdefault(t.get("artist"), []).append(t)
+
+    positioned: list[tuple[float, float, dict]] = []
+    for items in groups.values():
+        rng.shuffle(items)
+        count = len(items)
+        offset = rng.random()
+        for i, track in enumerate(items):
+            # Evenly space this artist's tracks across [0, 1) with a random phase;
+            # the tiebreak keeps ordering stable-but-random on exact collisions.
+            positioned.append(((i + offset) / count, rng.random(), track))
+
+    positioned.sort(key=lambda x: (x[0], x[1]))
+    return [track for _, _, track in positioned]
+
+
 def batched(items: Iterable, size: int) -> Iterator[list]:
     """Yield successive lists of at most ``size`` items (Spotify caps most calls at 100)."""
     batch: list = []

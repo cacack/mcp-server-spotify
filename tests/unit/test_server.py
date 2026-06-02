@@ -85,6 +85,34 @@ def test_find_playlists_sets_owned_flag(fake_spotify):
     assert out["Theirs"]["owned"] is False
 
 
+def test_shuffle_playlist_replaces_with_permutation(fake_spotify):
+    items = [
+        _wrap("spotify:track:a", "S1", "Sponge"),
+        _wrap("spotify:track:b", "S2", "Sponge"),
+        _wrap("spotify:track:c", "P1", "Pearl Jam"),
+        _wrap("spotify:track:d", "N1", "Nirvana"),
+    ]
+    client = fake_spotify(playlist_pages=[(items, False)])
+    out = server.shuffle_playlist("spotify:playlist:p")
+    assert out == {"playlist_id": "p", "tracks": 4}
+    replace = next(c for c in client.calls if c[0] == "playlist_replace")
+    assert replace[1] == "p"
+    # same set of URIs, just reordered
+    assert sorted(replace[2]) == [
+        "spotify:track:a",
+        "spotify:track:b",
+        "spotify:track:c",
+        "spotify:track:d",
+    ]
+
+
+def test_shuffle_playlist_empty_is_noop(fake_spotify):
+    client = fake_spotify(playlist_pages=[([], False)])
+    out = server.shuffle_playlist("p")
+    assert out == {"playlist_id": "p", "tracks": 0}
+    assert not any(c[0] == "playlist_replace" for c in client.calls)
+
+
 def test_save_playlist_follows_and_resolves_id(fake_spotify):
     client = fake_spotify()
     out = server.save_playlist("https://open.spotify.com/playlist/xyz?si=abc")

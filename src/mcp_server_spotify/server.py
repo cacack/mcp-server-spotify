@@ -1,17 +1,27 @@
 """FastMCP server exposing surgical Spotify playlist tools.
 
-Eight tools: find_playlists, search_tracks, create_playlist, save_playlist,
-get_playlist, add_tracks, remove_tracks, reorder_tracks. Together they let the
-model locate a playlist and resolve tracks to URIs, then edit precisely — the
-curation taste comes from the model, the precise placement comes from the API.
+Nine tools: find_playlists, search_tracks, create_playlist, save_playlist,
+get_playlist, add_tracks, remove_tracks, reorder_tracks, shuffle_playlist.
+Together they let the model locate a playlist and resolve tracks to URIs, then
+edit precisely — the curation taste comes from the model, the precise placement
+comes from the Spotify Web API.
 """
 
 from __future__ import annotations
 
+import random
+
 from mcp.server.fastmcp import FastMCP
 
 from . import auth
-from .normalize import batched, compact_playlist, compact_track, resolve_id, to_uri
+from .normalize import (
+    artist_spread_order,
+    batched,
+    compact_playlist,
+    compact_track,
+    resolve_id,
+    to_uri,
+)
 
 mcp = FastMCP("spotify")
 
@@ -175,6 +185,30 @@ def reorder_tracks(
     pid = resolve_id(playlist_id, "playlist")
     resp = client.playlist_reorder_items(pid, range_start, insert_before, range_length=range_length)
     return {"snapshot_id": resp.get("snapshot_id")}
+
+
+@mcp.tool()
+def shuffle_playlist(uri: str) -> dict:
+    """Reorder a playlist into a randomized, artist-spread order and persist it.
+
+    Spreads each artist's tracks across the playlist so the same artist rarely
+    lands back-to-back (a balanced shuffle, not pure random) — useful for
+    un-grouping a playlist that was built artist-by-artist. Persists the new order
+    in a single bulk replace. Note: only standard tracks are preserved; local
+    files and podcast episodes are dropped. Returns {playlist_id, tracks}.
+    """
+    client = auth.get_client()
+    pid = resolve_id(uri, "playlist")
+    tracks = get_playlist(pid)["tracks"]
+    if not tracks:
+        return {"playlist_id": pid, "tracks": 0}
+    ordered = artist_spread_order(tracks, random.Random())
+    uris = [t["uri"] for t in ordered]
+    # Replace the whole list in one call (<=100), then append any overflow in order.
+    client.playlist_replace_items(pid, uris[:_TRACK_BATCH])
+    for chunk in batched(uris[_TRACK_BATCH:], _TRACK_BATCH):
+        client.playlist_add_items(pid, chunk)
+    return {"playlist_id": pid, "tracks": len(uris)}
 
 
 def main() -> None:
