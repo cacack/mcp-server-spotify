@@ -77,6 +77,15 @@ def test_find_playlists_locates_own_playlist_by_name(temp_playlist):
     assert set(match) == {"name", "uri", "owner", "tracks", "public", "owned"}
 
 
+def test_shuffle_playlist_preserves_tracks(temp_playlist, two_track_uris):
+    pid = temp_playlist["playlist_id"]
+    server.add_tracks(pid, two_track_uris)
+    out = server.shuffle_playlist(pid)
+    assert out["tracks"] == 2
+    after = server.get_playlist(pid)
+    assert sorted(t["uri"] for t in after["tracks"]) == sorted(two_track_uris)
+
+
 def test_save_playlist_succeeds(temp_playlist):
     # Following is idempotent — the created playlist is already in the library,
     # but save_playlist should report success and resolve the id from the URI.

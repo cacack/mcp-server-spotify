@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import random
+
 import pytest
 
 from mcp_server_spotify.normalize import (
+    artist_spread_order,
     batched,
     compact_playlist,
     compact_track,
@@ -115,3 +118,25 @@ def test_compact_playlist_projects_fields():
 def test_compact_playlist_handles_missing(bad):
     out = compact_playlist(bad)
     assert out is None or out["owner"] is None
+
+
+def test_artist_spread_order_is_permutation():
+    tracks = [{"artist": "A", "uri": f"a{i}"} for i in range(5)]
+    tracks += [{"artist": "B", "uri": "b0"}, {"artist": "C", "uri": "c0"}]
+    out = artist_spread_order(tracks, random.Random(0))
+    assert sorted(t["uri"] for t in out) == sorted(t["uri"] for t in tracks)
+    assert len(out) == len(tracks)
+
+
+def test_artist_spread_order_declusters_balanced():
+    # Equal counts spread evenly should fully interleave — no adjacent repeats.
+    tracks = [{"artist": "A", "uri": f"a{i}"} for i in range(4)]
+    tracks += [{"artist": "B", "uri": f"b{i}"} for i in range(4)]
+    artists = [t["artist"] for t in artist_spread_order(tracks, random.Random(1))]
+    assert all(artists[i] != artists[i + 1] for i in range(len(artists) - 1))
+
+
+def test_artist_spread_order_single_artist_returns_all():
+    tracks = [{"artist": "A", "uri": f"a{i}"} for i in range(3)]
+    out = artist_spread_order(tracks, random.Random(2))
+    assert sorted(t["uri"] for t in out) == ["a0", "a1", "a2"]

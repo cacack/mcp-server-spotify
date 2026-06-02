@@ -19,6 +19,7 @@ The curation taste comes from the model; the precise placement comes from the AP
 | `add_tracks(playlist_id, uris, position?)` | Append or insert at a position (auto-chunks to 100) |
 | `remove_tracks(playlist_id, uris)` | Remove all occurrences of the given tracks |
 | `reorder_tracks(playlist_id, range_start, insert_before, range_length?)` | Move a block of tracks |
+| `shuffle_playlist(uri)` | Persist a randomized, artist-spread order (de-clusters same-artist runs) |
 
 URIs, `open.spotify.com` URLs, and bare IDs are all accepted interchangeably.
 
