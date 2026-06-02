@@ -98,7 +98,7 @@ class FakeSpotify:
 
     def playlist(self, pid, fields=None):
         self.calls.append(("playlist", pid, fields))
-        return {"name": "My Playlist"}
+        return {"name": "My Playlist", "snapshot_id": "snap0"}
 
     def playlist_items(self, pid, offset=0, limit=100, additional_types=("track",)):
         self.calls.append(("playlist_items", pid, offset, limit))
