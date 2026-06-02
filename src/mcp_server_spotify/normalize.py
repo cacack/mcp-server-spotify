@@ -53,6 +53,25 @@ def compact_track(track: dict | None) -> dict | None:
     }
 
 
+def compact_playlist(pl: dict | None) -> dict | None:
+    """Project a Spotify playlist object down to ``{name, uri, owner, tracks, public}``.
+
+    ``owner`` is the owner's user id. Returns ``None`` for empty/unavailable entries
+    (the playlists endpoint can include null items).
+    """
+    if not pl:
+        return None
+    owner = (pl.get("owner") or {}).get("id")
+    tracks = (pl.get("tracks") or {}).get("total")
+    return {
+        "name": pl.get("name"),
+        "uri": pl.get("uri"),
+        "owner": owner,
+        "tracks": tracks,
+        "public": pl.get("public"),
+    }
+
+
 def batched(items: Iterable, size: int) -> Iterator[list]:
     """Yield successive lists of at most ``size`` items (Spotify caps most calls at 100)."""
     batch: list = []

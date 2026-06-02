@@ -65,21 +65,32 @@ class FakeSpotify:
     ``calls`` log so tests can assert chunking, positions, and id resolution.
     """
 
-    def __init__(self, *, search_items=None, playlist_pages=None):
+    def __init__(self, *, search_items=None, playlist_pages=None, playlist_list_pages=None):
         self.calls: list[tuple] = []
         self._search_items = (
             search_items
             if search_items is not None
             else [_track("spotify:track:aaa", "Plowed", "Sponge")]
         )
-        # playlist_pages: list of (items, has_next) tuples returned in order.
+        # playlist_pages: list of (items, has_next) tuples returned by playlist_items.
         self._playlist_pages = playlist_pages or []
         self._page_idx = 0
+        # playlist_list_pages: list of (items, has_next) tuples for current_user_playlists.
+        self._playlist_list_pages = playlist_list_pages or []
+        self._list_idx = 0
 
     # -- reads --
     def current_user(self):
         self.calls.append(("current_user",))
         return {"id": "test-user"}
+
+    def current_user_playlists(self, limit=50, offset=0):
+        self.calls.append(("current_user_playlists", limit, offset))
+        if self._list_idx >= len(self._playlist_list_pages):
+            return {"items": [], "next": None}
+        items, has_next = self._playlist_list_pages[self._list_idx]
+        self._list_idx += 1
+        return {"items": items, "next": "url" if has_next else None}
 
     def search(self, q, type="track", limit=10):
         self.calls.append(("search", q, type, limit))

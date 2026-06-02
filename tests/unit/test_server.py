@@ -23,6 +23,68 @@ def _wrap(uri, name="N", artist="A"):
     }
 
 
+def _pl(name, owner="test-user", pid=None, total=0, public=False):
+    """A playlist object as returned by current_user_playlists."""
+    pid = pid or name
+    return {
+        "name": name,
+        "uri": f"spotify:playlist:{pid}",
+        "id": pid,
+        "owner": {"id": owner},
+        "tracks": {"total": total},
+        "public": public,
+    }
+
+
+def test_find_playlists_filters_by_name_case_insensitive(fake_spotify):
+    fake_spotify(
+        playlist_list_pages=[
+            (
+                [
+                    _pl("Blitz from the 90s", total=60),
+                    _pl("Chill Vibes", total=12),
+                    _pl("90s Hip Hop", total=30),
+                ],
+                False,
+            )
+        ]
+    )
+    out = server.find_playlists("blitz")
+    assert [p["name"] for p in out] == ["Blitz from the 90s"]
+    assert out[0]["uri"] == "spotify:playlist:Blitz from the 90s"
+    assert out[0]["tracks"] == 60
+
+
+def test_find_playlists_empty_returns_all(fake_spotify):
+    fake_spotify(playlist_list_pages=[([_pl("A"), _pl("B")], False)])
+    out = server.find_playlists()
+    assert {p["name"] for p in out} == {"A", "B"}
+
+
+def test_find_playlists_paginates(fake_spotify):
+    client = fake_spotify(
+        playlist_list_pages=[
+            ([_pl("One")], True),
+            ([_pl("Two")], False),
+        ]
+    )
+    out = server.find_playlists()
+    assert [p["name"] for p in out] == ["One", "Two"]
+    list_calls = [c for c in client.calls if c[0] == "current_user_playlists"]
+    assert [c[2] for c in list_calls] == [0, 1]  # offset advances by page size
+
+
+def test_find_playlists_sets_owned_flag(fake_spotify):
+    fake_spotify(
+        playlist_list_pages=[
+            ([_pl("Mine", owner="test-user"), _pl("Theirs", owner="someone-else")], False)
+        ]
+    )
+    out = {p["name"]: p for p in server.find_playlists()}
+    assert out["Mine"]["owned"] is True
+    assert out["Theirs"]["owned"] is False
+
+
 def test_search_tracks_returns_compact_and_clamps_limit(fake_spotify):
     client = fake_spotify(
         search_items=[
