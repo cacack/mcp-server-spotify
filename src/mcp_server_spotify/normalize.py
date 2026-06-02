@@ -18,7 +18,7 @@ def resolve_id(value: str, kind: str) -> str:
     value = value.strip()
     prefix = f"spotify:{kind}:"
     if value.startswith(prefix):
-        return value[len(prefix):]
+        return value[len(prefix) :]
     if "open.spotify.com" in value:
         # https://open.spotify.com/<kind>/<id>?si=...
         tail = value.split(f"/{kind}/", 1)[-1]

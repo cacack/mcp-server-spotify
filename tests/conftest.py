@@ -67,9 +67,11 @@ class FakeSpotify:
 
     def __init__(self, *, search_items=None, playlist_pages=None):
         self.calls: list[tuple] = []
-        self._search_items = search_items if search_items is not None else [
-            _track("spotify:track:aaa", "Plowed", "Sponge")
-        ]
+        self._search_items = (
+            search_items
+            if search_items is not None
+            else [_track("spotify:track:aaa", "Plowed", "Sponge")]
+        )
         # playlist_pages: list of (items, has_next) tuples returned in order.
         self._playlist_pages = playlist_pages or []
         self._page_idx = 0

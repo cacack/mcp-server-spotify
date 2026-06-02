@@ -38,9 +38,7 @@ def create_playlist(name: str, description: str = "", public: bool = False) -> d
     Returns {playlist_id, uri, url}. Add tracks with add_tracks.
     """
     client = auth.get_client()
-    pl = client.current_user_playlist_create(
-        name, public=public, description=description
-    )
+    pl = client.current_user_playlist_create(name, public=public, description=description)
     return {
         "playlist_id": pl["id"],
         "uri": pl["uri"],
@@ -61,9 +59,7 @@ def get_playlist(playlist_id: str) -> dict:
     tracks: list[dict] = []
     index = 0  # absolute playlist index, counts every item (matches reorder_tracks)
     while True:
-        page = client.playlist_items(
-            pid, offset=index, limit=100, additional_types=("track",)
-        )
+        page = client.playlist_items(pid, offset=index, limit=100, additional_types=("track",))
         items = page.get("items", [])
         for item in items:
             compact = compact_track(item)
@@ -127,9 +123,7 @@ def reorder_tracks(
     """
     client = auth.get_client()
     pid = resolve_id(playlist_id, "playlist")
-    resp = client.playlist_reorder_items(
-        pid, range_start, insert_before, range_length=range_length
-    )
+    resp = client.playlist_reorder_items(pid, range_start, insert_before, range_length=range_length)
     return {"snapshot_id": resp.get("snapshot_id")}
 
 

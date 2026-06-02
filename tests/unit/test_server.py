@@ -12,18 +12,39 @@ from mcp_server_spotify import server
 
 def _wrap(uri, name="N", artist="A"):
     """A playlist-item wrapper as returned by playlist_items."""
-    return {"track": {"type": "track", "uri": uri, "name": name,
-                      "artists": [{"name": artist}], "album": {}}}
+    return {
+        "track": {
+            "type": "track",
+            "uri": uri,
+            "name": name,
+            "artists": [{"name": artist}],
+            "album": {},
+        }
+    }
 
 
 def test_search_tracks_returns_compact_and_clamps_limit(fake_spotify):
-    client = fake_spotify(search_items=[
-        {"type": "track", "uri": "spotify:track:a", "name": "Plowed",
-         "artists": [{"name": "Sponge"}], "album": {"name": "X", "release_date": "1994"}},
-    ])
+    client = fake_spotify(
+        search_items=[
+            {
+                "type": "track",
+                "uri": "spotify:track:a",
+                "name": "Plowed",
+                "artists": [{"name": "Sponge"}],
+                "album": {"name": "X", "release_date": "1994"},
+            },
+        ]
+    )
     out = server.search_tracks("sponge plowed", limit=999)
-    assert out == [{"name": "Plowed", "artist": "Sponge", "album": "X",
-                    "year": "1994", "uri": "spotify:track:a"}]
+    assert out == [
+        {
+            "name": "Plowed",
+            "artist": "Sponge",
+            "album": "X",
+            "year": "1994",
+            "uri": "spotify:track:a",
+        }
+    ]
     # limit is clamped to Spotify's max of 50
     assert client.calls[0] == ("search", "sponge plowed", "track", 50)
 
@@ -63,11 +84,14 @@ def test_add_tracks_position_none_stays_none(fake_spotify):
 
 def test_add_tracks_normalizes_mixed_input_forms(fake_spotify):
     client = fake_spotify()
-    server.add_tracks("p", [
-        "spotify:track:a",
-        "https://open.spotify.com/track/b?si=zzz",
-        "c",
-    ])
+    server.add_tracks(
+        "p",
+        [
+            "spotify:track:a",
+            "https://open.spotify.com/track/b?si=zzz",
+            "c",
+        ],
+    )
     add_call = next(c for c in client.calls if c[0] == "playlist_add_items")
     assert add_call[2] == ["spotify:track:a", "spotify:track:b", "spotify:track:c"]
 

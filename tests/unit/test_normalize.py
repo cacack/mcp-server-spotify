@@ -51,16 +51,28 @@ def test_compact_track_raw_object():
 
 
 def test_compact_track_unwraps_playlist_item():
-    item = {"track": {"type": "track", "uri": "spotify:track:x", "name": "N",
-                      "artists": [{"name": "A"}], "album": {}}}
+    item = {
+        "track": {
+            "type": "track",
+            "uri": "spotify:track:x",
+            "name": "N",
+            "artists": [{"name": "A"}],
+            "album": {},
+        }
+    }
     out = compact_track(item)
     assert out["uri"] == "spotify:track:x"
     assert out["year"] is None  # missing release_date
 
 
 def test_compact_track_joins_multiple_artists():
-    track = {"type": "track", "uri": "u", "name": "N",
-             "artists": [{"name": "A"}, {"name": "B"}], "album": {}}
+    track = {
+        "type": "track",
+        "uri": "u",
+        "name": "N",
+        "artists": [{"name": "A"}, {"name": "B"}],
+        "album": {},
+    }
     assert compact_track(track)["artist"] == "A, B"
 
 

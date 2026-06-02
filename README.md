@@ -83,6 +83,20 @@ Add to your Claude Desktop / Claude Code MCP config:
   and review diffs on update rather than auto-bumping.
 - Credentials live in a gitignored `.env` / Claude config; the token cache is gitignored.
 
+## Development
+
+```bash
+uv sync                      # install deps (incl. dev group)
+uv run ruff check .          # lint
+uv run ruff format .         # format
+uv run pytest                # unit tests (acceptance auto-skipped)
+uv run pytest --run-acceptance   # + live API lifecycle (needs SPOTIPY_* creds)
+```
+
+CI (GitHub Actions) runs the PR-title check, ruff lint/format, and the unit tests
+on every PR; the `CI Success` job is the aggregate gate. Acceptance tests are not
+run in CI — they require live Spotify credentials and stay local/manual.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
