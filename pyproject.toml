@@ -7,7 +7,9 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "Chris Clonch", email = "chris@theclonchs.com" }]
 dependencies = [
-    "mcp[cli]>=1.2.0",
+    # mcp 2.x renamed FastMCP to MCPServer and removed mcp.server.fastmcp,
+    # which server.py imports. Capped until the v2 migration lands.
+    "mcp[cli]>=1.2.0,<2",
     "spotipy>=2.24.0",
 ]
 
